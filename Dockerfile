@@ -10,6 +10,7 @@ COPY tools /tools
 ENV PATH="/tools:${PATH}"
 
 # Zainstaluj dependencies i narzędzia systemowe
+RUN apk add --no-cache libstdc++ libc6-compat
 RUN apk add --no-cache bash curl openjdk11 \
     && npm ci
 
