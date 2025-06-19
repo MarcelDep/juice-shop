@@ -2,22 +2,30 @@ FROM node:22-alpine AS builder
 
 WORKDIR /juice-shop
 
-# Skopiuj wszystko (lub przynajmniej frontend i package*.json)
+# Kopiujemy package.json i package-lock.json
+COPY package*.json ./
+
+# Instalujemy wszystkie dependencies (dev i prod) bo frontend build tego wymaga
+RUN npm ci
+
+# Kopiujemy resztę plików
 COPY . .
 
-# (opcjonalnie) zainstaluj narzędzia budujące dla natywnych paczek
-RUN apk add --no-cache python3 make g++
+# Budujemy frontend i backend
+RUN npm run build:frontend
+RUN npm run build:server
 
-RUN npm ci --only=production
-
-RUN npm run build
-
+# Usuwamy frontendowe node_modules oraz niepotrzebne pliki, żeby zmniejszyć obraz
 RUN rm -rf frontend/node_modules frontend/.angular frontend/src/assets
 
+# Tworzymy folder na logi i zmieniamy właściciela
 RUN mkdir logs && chown -R node:node logs
 
+# Ustawiamy użytkownika node
 USER node
 
+# Otwieramy port
 EXPOSE 3000
 
-CMD ["node", "build/app.js"]
+# Uruchamiamy aplikację
+CMD ["node", "build/app"]
