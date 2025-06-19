@@ -9,14 +9,13 @@ on:
 jobs:
   devsecops:
     runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:20.10.16-dind
-        privileged: true
+    container:
+      image: docker:20.10.16-dind
+      options: --privileged
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v3
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
