@@ -9,9 +9,12 @@ on:
 jobs:
   devsecops:
     runs-on: ubuntu-latest
-    container:
-      image: docker:20.10.16-dind
-      options: --privileged
+    services:
+      docker:
+        image: docker:20.10.16-dind
+        options: --privileged
+        ports:
+          - 3000:3000
 
     steps:
     - name: Checkout code
