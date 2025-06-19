@@ -56,7 +56,8 @@ jobs:
     - name: Install Gitleaks
       run: |
         sudo apt-get update && sudo apt-get install -y curl unzip
-        curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin v8.17.0
+        curl -sSfL https://github.com/gitleaks/gitleaks/releases/latest/download/gitleaks-linux-amd64.tar.gz | tar xz -C /usr/local/bin gitleaks
+        chmod +x /usr/local/bin/gitleaks
 
     - name: Run Gitleaks scan
       run: gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
@@ -96,13 +97,13 @@ jobs:
       run: |
         docker rm -f juice-shop-test || true
         docker run -d --network zapnet --name juice-shop-test juice-shop:latest
-        sleep 25
+        sleep 30
 
-    # Create a directory for ZAP reports in the runner workspace
+    # Create directory for ZAP reports
     - name: Create reports directory
       run: mkdir -p ${{ github.workspace }}/zap-reports
 
-    # Run OWASP ZAP Baseline Scan inside zapnet network and save reports to workspace
+    # Run OWASP ZAP Baseline Scan in zapnet network with volume mount for reports
     - name: Run OWASP ZAP Baseline Scan
       run: |
         docker run --rm --network zapnet \
@@ -119,3 +120,4 @@ jobs:
       with:
         name: zap-reports
         path: zap-reports/
+
