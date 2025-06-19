@@ -9,10 +9,8 @@ COPY tools /tools
 # Dodaj tools do PATH
 ENV PATH="/tools:${PATH}"
 
-# Zainstaluj dependencies i narzędzia systemowe
-RUN apk add --no-cache libstdc++ libc6-compat
-RUN apk add --no-cache bash curl openjdk11 \
-    && npm ci
+# Zainstaluj zależności systemowe i npm dependencies
+RUN apk add --no-cache libstdc++ libc6-compat bash curl openjdk11 && npm ci
 
 # Buduj frontend i backend
 RUN npm run build:frontend
@@ -29,5 +27,6 @@ USER node
 EXPOSE 3000
 
 CMD ["node", "build/app"]
+
 
 
