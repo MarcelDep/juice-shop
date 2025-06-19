@@ -36,7 +36,7 @@ jobs:
       run: |
         apt-get update && apt-get install -y jq
         cat audit-report.json
-        vulnerabilities=$(jq '[.advisories[] | select(.severity=="high" or .severity=="critical")] | length' audit-report.json)
+        vulnerabilities=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' audit-report.json)
         echo "High/Critical vulnerabilities found: $vulnerabilities"
         if [ "$vulnerabilities" -ge 2 ]; then
           echo "Found 2 or more high/critical vulnerabilities - fail build"
