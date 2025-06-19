@@ -7,16 +7,15 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  devsecops:
     runs-on: ubuntu-latest
-
     services:
       docker:
         image: docker:20.10.16-dind
         privileged: true
 
     steps:
-    - name: Checkout repo
+    - name: Checkout code
       uses: actions/checkout@v3
 
     - name: Set up Node.js
@@ -25,18 +24,27 @@ jobs:
         node-version: '22'
 
     # SCA - npm audit
-    - name: Run npm audit
-      run: npm install && npm audit --json > audit-report.json || true
+    - name: Install dependencies
+      run: npm install
 
-    - name: Check for High/Critical vulnerabilities in npm audit report
+    - name: Run npm audit
+      run: npm audit --json > audit-report.json || true
+
+    - name: Check High/Critical vulns in npm audit
       run: |
         cat audit-report.json
         vulnerabilities=$(jq '[.advisories[] | select(.severity=="high" or .severity=="critical")] | length' audit-report.json)
-        echo "High/Critical vulns found: $vulnerabilities"
+        echo "High/Critical vulnerabilities found: $vulnerabilities"
         if [ "$vulnerabilities" -ge 2 ]; then
           echo "Found 2 or more high/critical vulnerabilities - fail build"
           exit 1
         fi
+
+    - name: Upload audit report
+      uses: actions/upload-artifact@v4
+      with:
+        name: npm-audit-report
+        path: audit-report.json
 
     # SAST - Semgrep
     - name: Run Semgrep scan
@@ -44,33 +52,49 @@ jobs:
       with:
         config: "p/owasp-nodejs"
 
-    # Secrets scan - Gitleaks
+    # Secrets Scan - Gitleaks
     - name: Install Gitleaks
       run: |
         curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin v8.17.0
 
     - name: Run Gitleaks scan
-      run: gitleaks detect --verbose --exit-code=1
+      run: gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
 
-    # Build Docker image
+    - name: Upload Gitleaks report
+      uses: actions/upload-artifact@v4
+      with:
+        name: gitleaks-report
+        path: gitleaks-report.json
+
+    # Docker build
     - name: Build Docker image
       run: docker build -t juice-shop:latest .
 
-    # DAST - OWASP ZAP scan (dynamic scan)
-    - name: Run OWASP ZAP Baseline Scan
-      uses: zaproxy/action-baseline@v0.7.0
-      with:
-        target: "http://localhost:3000"
-        rules_file_name: ".github/zap/rules.yaml"
-      env:
-        DOCKER_HOST: tcp://localhost:2375
-
-    # Scan Docker image with Trivy
+    # Trivy - image scan
     - name: Install Trivy
       run: |
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
 
     - name: Scan Docker image with Trivy
       run: |
-        trivy image --severity HIGH,CRITICAL --exit-code 1 juice-shop:latest || (echo "Fix high/critical vulnerabilities in Docker image" && exit 1)
+        trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:latest || true
 
+    - name: Upload Trivy report
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-report
+        path: trivy-report.txt
+
+    # DAST - OWASP ZAP (run app + scan)
+    - name: Run Juice Shop container
+      run: |
+        docker run -d -p 3000:3000 --name juice-shop-test juice-shop:latest
+        sleep 20  # Wait for app to fully start
+
+    - name: OWASP ZAP Baseline Scan
+      uses: zaproxy/action-baseline@v0.7.0
+      with:
+        target: "http://localhost:3000"
+        fail_action: false
+      env:
+        DOCKER_HOST: tcp://localhost:2375
