@@ -2,30 +2,24 @@ FROM node:22-alpine AS builder
 
 WORKDIR /juice-shop
 
-# Kopiujemy package.json i package-lock.json
-COPY package*.json ./
-
-# Instalujemy wszystkie dependencies (dev i prod) bo frontend build tego wymaga
-RUN npm ci
-
-# Kopiujemy resztę plików
+# 1. Skopiuj wszystko na raz
 COPY . .
 
-# Budujemy frontend i backend
+# 2. Teraz dopiero instaluj dependencies
+RUN npm ci
+
+# 3. Buduj frontend i backend
 RUN npm run build:frontend
 RUN npm run build:server
 
-# Usuwamy frontendowe node_modules oraz niepotrzebne pliki, żeby zmniejszyć obraz
+# 4. Czyść niepotrzebne pliki
 RUN rm -rf frontend/node_modules frontend/.angular frontend/src/assets
 
-# Tworzymy folder na logi i zmieniamy właściciela
+# 5. Przygotuj logi i właściciela
 RUN mkdir logs && chown -R node:node logs
 
-# Ustawiamy użytkownika node
 USER node
 
-# Otwieramy port
 EXPOSE 3000
 
-# Uruchamiamy aplikację
 CMD ["node", "build/app"]
