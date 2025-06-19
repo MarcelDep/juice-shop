@@ -50,7 +50,7 @@ jobs:
     - name: Run Semgrep scan
       uses: returntocorp/semgrep-action@v1
       with:
-        config: "p/owasp-nodejs"
+        config: p/owasp-top-ten
 
     # Secrets scan - Gitleaks
     - name: Install Gitleaks
@@ -58,8 +58,9 @@ jobs:
         sudo apt-get update && sudo apt-get install -y curl unzip
         curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin v8.17.0
     - name: Run Gitleaks scan
-      run: gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
-
+      uses: gitleaks/gitleaks-action@v2
+      with:
+        args: detect --verbose --report-format json --report-path gitleaks-report.json
     - name: Upload Gitleaks report
       uses: actions/upload-artifact@v4
       with:
@@ -101,13 +102,13 @@ jobs:
     # Run OWASP ZAP Baseline Scan inside zapnet network and save reports to workspace
     - name: Run OWASP ZAP Baseline Scan
       run: |
-        docker run --rm --network zapnet \
-          -v ${{ github.workspace }}/zap-reports:/zap/wrk:rw \
+        docker run --rm \
+          -v ${{ github.workspace }}/zap-reports:/zap/wrk \
           ghcr.io/zaproxy/zaproxy:stable \
-          zap-baseline.py -t http://juice-shop-test:3000 \
-          -J /zap/wrk/report_json.json \
-          -w /zap/wrk/report_md.md \
-          -r /zap/wrk/report_html.html || true
+          zap-baseline.py \
+            -t http://host.docker.internal:3000 \
+            -J /zap/wrk/zap-report.json || true
+
     # Upload ZAP reports
     - name: Upload ZAP reports
       uses: actions/upload-artifact@v4
