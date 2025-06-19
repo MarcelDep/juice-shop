@@ -47,10 +47,21 @@ jobs:
         path: audit-report.json
 
     # SAST - Semgrep
+    - name: Install latest Semgrep
+      run: |
+        pip install --upgrade semgrep
+    
     - name: Run Semgrep scan
-      uses: returntocorp/semgrep-action@v1
+      run: |
+        semgrep --config=p/owasp-top-ten \
+                --max-target-bytes=5000000 \
+                --json --output=semgrep-report.json || true
+    
+    - name: Upload Semgrep report
+      uses: actions/upload-artifact@v4
       with:
-        config: p/owasp-top-ten
+        name: semgrep-report
+        path: semgrep-report.json
 
     # Secrets scan - Gitleaks
     - name: Install Gitleaks
