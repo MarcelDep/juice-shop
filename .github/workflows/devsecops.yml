@@ -89,11 +89,12 @@ jobs:
         name: trivy-report
         path: trivy-report.txt
 
-    # DAST - ZAP
     - name: Run Juice Shop container
       run: |
+        docker rm -f juice-shop-test || true
         docker run -d -p 3001:3000 --name juice-shop-test juice-shop:latest
         sleep 25
+
 
     - name: Run OWASP ZAP Baseline Scan
       uses: zaproxy/action-baseline@v0.7.0
