@@ -9,55 +9,57 @@ on:
 jobs:
   devsecops:
     runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:20.10.16-dind
-        options: --privileged
+    container:
+      image: docker:20.10.16-dind
+      options: --privileged
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
-    - name: Build tools Docker image
-      run: docker build -t devsecops-tools:latest .
 
     - name: Install Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '22'
 
+    # SCA - npm audit
     - name: Install dependencies
       run: npm install
 
-    # Npm audit using host runner
     - name: Run npm audit
       run: npm audit --json > audit-report.json || true
 
-    - name: Check High/Critical vulnerabilities in npm audit
+    - name: Check High/Critical vulns in npm audit
       run: |
-        sudo apt-get update && sudo apt-get install -y jq
+        apt-get update && apt-get install -y jq
         cat audit-report.json
-        vulnerabilities=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' audit-report.json)
+        vulnerabilities=$(jq '[.advisories[] | select(.severity=="high" or .severity=="critical")] | length' audit-report.json)
         echo "High/Critical vulnerabilities found: $vulnerabilities"
         if [ "$vulnerabilities" -ge 2 ]; then
-          echo "Found 2 or more high/critical vulnerabilities - continuing build"
+          echo "Found 2 or more high/critical vulnerabilities - fail build"
+          exit 1
         fi
 
-    - name: Upload npm audit report
+    - name: Upload audit report
       uses: actions/upload-artifact@v4
       with:
         name: npm-audit-report
         path: audit-report.json
 
-    # Run Semgrep inside container
+    # SAST - Semgrep (oficjalna akcja, bez ręcznej instalacji)
     - name: Run Semgrep scan
-      run: |
-        docker run --rm -v ${{ github.workspace }}:/src -w /src devsecops-tools:latest semgrep --config=p/owasp-nodejs
+      uses: returntocorp/semgrep-action@v1
+      with:
+        config: "p/owasp-nodejs"
 
-    # Run Gitleaks inside container
-    - name: Run Gitleaks scan
+    # Secrets scan - Gitleaks
+    - name: Install Gitleaks
       run: |
-        docker run --rm -v ${{ github.workspace }}:/src -w /src devsecops-tools:latest gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
+        apt-get update && apt-get install -y curl unzip
+        curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin v8.17.0
+
+    - name: Run Gitleaks scan
+      run: gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
 
     - name: Upload Gitleaks report
       uses: actions/upload-artifact@v4
@@ -65,14 +67,19 @@ jobs:
         name: gitleaks-report
         path: gitleaks-report.json
 
-    # Build Juice Shop Docker image
-    - name: Build Juice Shop Docker image
+    # Docker build
+    - name: Build Docker image
       run: docker build -t juice-shop:latest .
 
-    # Scan Juice Shop image with Trivy (assuming Trivy jest zainstalowany w devsecops-tools)
+    # Trivy scan
+    - name: Install Trivy
+      run: |
+        apt-get update && apt-get install -y curl
+        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+
     - name: Scan Docker image with Trivy
       run: |
-        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock devsecops-tools:latest trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:latest || true
+        trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:latest || true
 
     - name: Upload Trivy report
       uses: actions/upload-artifact@v4
@@ -80,31 +87,29 @@ jobs:
         name: trivy-report
         path: trivy-report.txt
 
-    # Setup Docker network
-    - name: Setup Docker network
-      run: docker network create zapnet || true
-
-    # Run Juice Shop container
+    # DAST - ZAP
     - name: Run Juice Shop container
+      run: docker run -d -p 3000:3000 --name juice-shop-test juice-shop:latest
+
+    - name: Wait for Juice Shop to be ready
       run: |
-        docker rm -f juice-shop-test || true
-        docker run -d --network zapnet --name juice-shop-test juice-shop:latest
-        sleep 25
+        for i in {1..30}; do
+          if curl -s http://localhost:3000 > /dev/null; then
+            echo "Juice Shop is up!"
+            exit 0
+          fi
+          echo "Waiting for Juice Shop to start..."
+          sleep 5
+        done
+        echo "Juice Shop did not start in time"
+        exit 1
 
-    # Create ZAP reports directory
-    - name: Create reports directory
-      run: mkdir -p ${{ github.workspace }}/zap-reports
-
-    # Run OWASP ZAP Baseline Scan (w dedykowanym kontenerze ZAP, do sieci zapnet)
     - name: Run OWASP ZAP Baseline Scan
-      run: |
-        docker run --rm --network zapnet \
-          -v ${{ github.workspace }}/zap-reports:/zap/wrk:rw \
-          ghcr.io/zaproxy/zaproxy:stable \
-          zap-baseline.py -t http://juice-shop-test:3000 \
-          -J /zap/wrk/report_json.json \
-          -w /zap/wrk/report_md.md \
-          -r /zap/wrk/report_html.html || true
+      uses: zaproxy/action-baseline@v0.7.0
+      with:
+        target: "http://localhost:3000"
+        fail_action: false
+
 
     - name: Upload ZAP reports
       uses: actions/upload-artifact@v4
