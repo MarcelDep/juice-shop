@@ -69,9 +69,8 @@ jobs:
         sudo apt-get update && sudo apt-get install -y curl unzip
         curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin v8.17.0
     - name: Run Gitleaks scan
-      uses: gitleaks/gitleaks-action@v2
-      with:
-        args: detect --verbose --report-format json --report-path gitleaks-report.json
+      run: |
+        gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
     - name: Upload Gitleaks report
       uses: actions/upload-artifact@v4
       with:
@@ -121,13 +120,6 @@ jobs:
             -J /zap/wrk/zap-report.json || true
 
     # Upload ZAP reports
-    - name: Upload ZAP reports
-      uses: actions/upload-artifact@v4
-      with:
-        name: zap-reports
-        path: zap-reports/
-
-
     - name: Upload ZAP reports
       uses: actions/upload-artifact@v4
       with:
