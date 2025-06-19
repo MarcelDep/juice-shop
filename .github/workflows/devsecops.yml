@@ -87,21 +87,34 @@ jobs:
         name: trivy-report
         path: trivy-report.txt
 
-    # Run Juice Shop container in custom network
+    # Setup Docker network
     - name: Setup Docker network
-      run: |
-        docker network create zapnet || true
+      run: docker network create zapnet || true
 
+    # Run Juice Shop container
     - name: Run Juice Shop container
       run: |
         docker rm -f juice-shop-test || true
         docker run -d --network zapnet --name juice-shop-test juice-shop:latest
         sleep 25
 
-    # Run OWASP ZAP Baseline Scan targeting container name inside network
+    # Run OWASP ZAP Baseline Scan manually inside the zapnet network
     - name: Run OWASP ZAP Baseline Scan
-      uses: zaproxy/action-baseline@v0.9.0
-      with:
-        target: "http://juice-shop-test:3000"
-        fail_action: false
+      run: |
+        docker run --rm --network zapnet \
+          -v ${{ github.workspace }}:/zap/wrk/:rw \
+          ghcr.io/zaproxy/zaproxy:stable \
+          zap-baseline.py -t http://juice-shop-test:3000 \
+          -J /zap/wrk/report_json.json \
+          -w /zap/wrk/report_md.md \
+          -r /zap/wrk/report_html.html || true
 
+    # Upload ZAP reports
+    - name: Upload ZAP reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: zap-reports
+        path: |
+          report_json.json
+          report_md.md
+          report_html.html
