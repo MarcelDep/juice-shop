@@ -2,13 +2,13 @@ FROM node:22-alpine AS builder
 
 WORKDIR /juice-shop
 
+# Skopiuj wszystko (lub przynajmniej frontend i package*.json)
+COPY . .
+
+# (opcjonalnie) zainstaluj narzędzia budujące dla natywnych paczek
 RUN apk add --no-cache python3 make g++
 
-COPY package*.json ./
-
 RUN npm ci --only=production
-
-COPY . .
 
 RUN npm run build
 
