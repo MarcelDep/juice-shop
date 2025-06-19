@@ -8,11 +8,11 @@ on:
 
 jobs:
   devsecops:
-    runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:20.10.16-dind
-        privileged: true
+  runs-on: ubuntu-latest
+  container:
+    image: docker:20.10.16-dind
+    options: --privileged
+
 
     steps:
     - name: Checkout code
