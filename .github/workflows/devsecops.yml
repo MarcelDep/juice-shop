@@ -18,19 +18,22 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Build tools Docker image
+      run: docker build -t devsecops-tools:latest .
+
     - name: Install Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '22'
 
-    # SCA - npm audit
     - name: Install dependencies
       run: npm install
-    
+
+    # Npm audit using host runner
     - name: Run npm audit
       run: npm audit --json > audit-report.json || true
-    
-    - name: Check High/Critical vulns in npm audit
+
+    - name: Check High/Critical vulnerabilities in npm audit
       run: |
         sudo apt-get update && sudo apt-get install -y jq
         cat audit-report.json
@@ -39,27 +42,22 @@ jobs:
         if [ "$vulnerabilities" -ge 2 ]; then
           echo "Found 2 or more high/critical vulnerabilities - continuing build"
         fi
-    
+
     - name: Upload npm audit report
       uses: actions/upload-artifact@v4
       with:
         name: npm-audit-report
         path: audit-report.json
 
-    # SAST - Semgrep
+    # Run Semgrep inside container
     - name: Run Semgrep scan
-      uses: returntocorp/semgrep-action@v1
-      with:
-        config: "p/owasp-nodejs"
-
-    # Secrets scan - Gitleaks
-    - name: Install Gitleaks
       run: |
-        sudo apt-get update && sudo apt-get install -y curl unzip
-        curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin v8.17.0
+        docker run --rm -v ${{ github.workspace }}:/src -w /src devsecops-tools:latest semgrep --config=p/owasp-nodejs
 
+    # Run Gitleaks inside container
     - name: Run Gitleaks scan
-      run: gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/src -w /src devsecops-tools:latest gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
 
     - name: Upload Gitleaks report
       uses: actions/upload-artifact@v4
@@ -67,19 +65,14 @@ jobs:
         name: gitleaks-report
         path: gitleaks-report.json
 
-    # Docker build
-    - name: Build Docker image
+    # Build Juice Shop Docker image
+    - name: Build Juice Shop Docker image
       run: docker build -t juice-shop:latest .
 
-    # Trivy scan
-    - name: Install Trivy
-      run: |
-        sudo apt-get update && sudo apt-get install -y curl
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-
+    # Scan Juice Shop image with Trivy (assuming Trivy jest zainstalowany w devsecops-tools)
     - name: Scan Docker image with Trivy
       run: |
-        trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:latest || true
+        docker run --rm -v /var/run/docker.sock:/var/run/docker.sock devsecops-tools:latest trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:latest || true
 
     - name: Upload Trivy report
       uses: actions/upload-artifact@v4
@@ -98,11 +91,11 @@ jobs:
         docker run -d --network zapnet --name juice-shop-test juice-shop:latest
         sleep 25
 
-    # Create a directory for ZAP reports in the runner workspace
+    # Create ZAP reports directory
     - name: Create reports directory
       run: mkdir -p ${{ github.workspace }}/zap-reports
 
-    # Run OWASP ZAP Baseline Scan inside zapnet network and save reports to workspace
+    # Run OWASP ZAP Baseline Scan (w dedykowanym kontenerze ZAP, do sieci zapnet)
     - name: Run OWASP ZAP Baseline Scan
       run: |
         docker run --rm --network zapnet \
@@ -113,10 +106,8 @@ jobs:
           -w /zap/wrk/report_md.md \
           -r /zap/wrk/report_html.html || true
 
-    # Upload ZAP reports
     - name: Upload ZAP reports
       uses: actions/upload-artifact@v4
       with:
         name: zap-reports
         path: zap-reports/
-
