@@ -18,6 +18,7 @@ data/chatbot/*.*
 # Build
 .nyc_output/
 .sass-cache/
+build/
 cache/
 dist/
 logs/
