@@ -100,24 +100,16 @@ jobs:
       run: |
         docker rm -f juice-shop-test || true
         docker run -d --network zapnet --name juice-shop-test -p 3000:3000 juice-shop:local
+        sleep 30
     
-    - name: Wait for Juice Shop to be ready
-      run: |
-        for i in {1..30}; do
-          if curl -s http://juice-shop-test:3000 > /dev/null; then
-            echo "Juice Shop is ready"
-            break
-          else
-            echo "Waiting for Juice Shop..."
-            sleep 5
-          fi
-        done
+    - name: Check containers in zapnet network
+      run: docker network inspect zapnet
+    
+    - name: Test connectivity to juice-shop-test from alpine container
+      run: docker run --rm --network zapnet alpine ping -c 3 juice-shop-test
     
     - name: Create ZAP reports directory
       run: mkdir -p ${{ github.workspace }}/zap-reports
-    
-    - name: Set permissions on ZAP reports directory
-      run: chmod -R 777 ${{ github.workspace }}/zap-reports
     
     - name: Run OWASP ZAP Baseline Scan
       run: |
