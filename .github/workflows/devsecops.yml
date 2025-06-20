@@ -66,12 +66,13 @@ jobs:
     # Secrets scan - Gitleaks
     - name: Install Gitleaks
       run: |
-        sudo apt-get update
-        sudo apt-get install -y curl unzip
-        curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | \
-          sh -s -- -b /usr/local/bin v8.17.0
-        gitleaks version  # Debug: sprawdź wersję po instalacji
-    
+        curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.17.0/gitleaks_8.17.0_linux_x64.tar.gz \
+          -o gitleaks.tar.gz
+        tar -xvf gitleaks.tar.gz gitleaks
+        chmod +x gitleaks
+        sudo mv gitleaks /usr/local/bin/
+        gitleaks version  # Debug: potwierdzenie instalacji
+
     - name: Run Gitleaks scan
       run: |
         gitleaks detect \
