@@ -95,16 +95,19 @@ jobs:
     # ZAP setup
     - name: Create Docker network
       run: docker network create zapnet || true
-
+    
     - name: Run Juice Shop container
       run: |
         docker rm -f juice-shop-test || true
         docker run -d --network zapnet --name juice-shop-test -p 3000:3000 juice-shop:local
         sleep 20
-
+    
     - name: Create ZAP reports directory
       run: mkdir -p ${{ github.workspace }}/zap-reports
-
+    
+    - name: Set permissions on ZAP reports directory
+      run: chmod -R 777 ${{ github.workspace }}/zap-reports
+    
     - name: Run OWASP ZAP Baseline Scan
       run: |
         docker run --rm --network zapnet \
@@ -113,19 +116,15 @@ jobs:
             -t http://juice-shop-test:3000 \
             -J /zap/wrk/zap-report.json \
             -r /zap/wrk/zap-report.html || true
-
+    
     - name: Upload ZAP JSON report
       uses: actions/upload-artifact@v4
       with:
         name: zap-report-json
         path: zap-reports/zap-report.json
-
+    
     - name: Upload ZAP HTML report
       uses: actions/upload-artifact@v4
       with:
         name: zap-report-html
         path: zap-reports/zap-report.html
-
-
-
-
