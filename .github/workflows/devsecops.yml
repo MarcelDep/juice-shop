@@ -9,13 +9,13 @@ on:
 jobs:
   devsecops:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
 
     services:
       docker:
         image: docker:dind
-        privileged: true
-        options: --host=tcp://0.0.0.0:2375 --storage-driver=overlay2
+        options: --privileged --host=tcp://0.0.0.0:2375 --storage-driver=overlay2
+        ports:
+          - 2375:2375
 
     env:
       DOCKER_HOST: tcp://localhost:2375
