@@ -2,20 +2,19 @@ name: DevSecOps Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   devsecops:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     services:
       docker:
         image: docker:dind
         privileged: true
-        ports:
-          - 2375:2375
         options: --host=tcp://0.0.0.0:2375 --storage-driver=overlay2
 
     env:
@@ -25,9 +24,6 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
-
-    - name: Setup Docker client to talk to Docker-in-Docker
-      run: echo "DOCKER_HOST=tcp://localhost:2375" >> $GITHUB_ENV
 
     - name: Set up Node.js
       uses: actions/setup-node@v3
@@ -92,15 +88,7 @@ jobs:
     - name: Build Juice Shop Docker image
       run: docker build -t juice-shop:local .
 
-    # Run container on port 3000
-    - name: Run Juice Shop container on port 3000
-      run: docker run -d -p 3000:3000 --name juice-shop-container juice-shop:local
-
-    # (Opcjonalnie) delay for app startup, np. 10s
-    - name: Wait for app to start
-      run: sleep 10
-
-    # Trivy scan
+    # Trivy scan BEFORE running container
     - name: Install Trivy
       run: |
         sudo apt-get update && sudo apt-get install -y curl
@@ -115,10 +103,18 @@ jobs:
         name: trivy-report
         path: trivy-report.txt
 
-    # Stop and remove container after all tests
-    - name: Stop and remove Juice Shop container
+    # Run container on port 3000, detached
+    - name: Run Juice Shop container on port 3000
+      run: docker run -d --rm -p 3000:3000 --name juice-shop-container juice-shop:local
+
+    # Wait for app startup (adjust if needed)
+    - name: Wait for app to start
+      run: sleep 10
+
+    # Stop container (if still running)
+    - name: Stop Juice Shop container
       if: always()
-      run: |
-        docker stop juice-shop-container || true
+      run: docker stop juice-shop-container || true
+
         docker rm juice-shop-container || true
 
