@@ -13,9 +13,14 @@ jobs:
     services:
       docker:
         image: docker:dind
-        options: --privileged
+        privileged: true
         ports:
           - 2375:2375
+        options: --host=tcp://0.0.0.0:2375 --storage-driver=overlay2
+
+    env:
+      DOCKER_HOST: tcp://localhost:2375
+      DOCKER_TLS_VERIFY: 0
 
     steps:
     - name: Checkout code
