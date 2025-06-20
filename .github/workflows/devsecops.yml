@@ -115,43 +115,41 @@ jobs:
     - name: Setup Docker network
       run: docker network create zapnet || true
 
-    # Run Juice Shop container
+    # Build and run Juice Shop container
     - name: Run Juice Shop container
       run: |
         docker rm -f juice-shop-test || true
-        docker run -d --network zapnet --name juice-shop-test juice-shop:latest
-        sleep 25
-    # Create a directory for ZAP reports in the runner workspace
-    - name: Prepare ZAP reports folder
+        docker run -d --network zapnet --name juice-shop-test -p 3000:3000 juice-shop:latest
+        sleep 20
+
+    # Prepare ZAP reports directory
+    - name: Create reports directory
       run: mkdir -p ${{ github.workspace }}/zap-reports
-    
-    - name: Run Juice Shop container
-      run: |
-        docker network create zapnet || true
-        docker rm -f juice-shop-test || true
-        docker run -d --network zapnet --name juice-shop-test juice-shop:latest
-        sleep 25
-    
+
+    # Run OWASP ZAP Baseline Scan
     - name: Run OWASP ZAP Baseline Scan
       run: |
         docker run --rm \
           --network zapnet \
           -v ${{ github.workspace }}/zap-reports:/zap/wrk \
-          owasp/zap2docker-stable zap-baseline.py \
-          -t http://juice-shop-test:3000 \
-          -J /zap/wrk/zap-report.json \
-          -r /zap/wrk/zap-report.html || true
-    
+          owasp/zap2docker-stable:2.14.0 zap-baseline.py \
+            -t http://juice-shop-test:3000 \
+            -J /zap/wrk/zap-report.json \
+            -r /zap/wrk/zap-report.html || true
+
+    # Upload ZAP JSON Report
     - name: Upload ZAP JSON Report
       uses: actions/upload-artifact@v4
       with:
         name: zap-report-json
         path: zap-reports/zap-report.json
-    
+
+    # Upload ZAP HTML Report
     - name: Upload ZAP HTML Report
       uses: actions/upload-artifact@v4
       with:
         name: zap-report-html
         path: zap-reports/zap-report.html
+
 
 
