@@ -66,11 +66,26 @@ jobs:
     # Secrets scan - Gitleaks
     - name: Install Gitleaks
       run: |
-        sudo apt-get update && sudo apt-get install -y curl unzip
-        curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | sh -s -- -b /usr/local/bin v8.17.0
+        sudo apt-get update
+        sudo apt-get install -y curl unzip
+        curl -sSfL https://raw.githubusercontent.com/gitleaks/gitleaks/master/install.sh | \
+          sh -s -- -b /usr/local/bin v8.17.0
+        gitleaks version  # Debug: sprawdź wersję po instalacji
+    
     - name: Run Gitleaks scan
       run: |
-        gitleaks detect --verbose --report-format json --report-path gitleaks-report.json || true
+        gitleaks detect \
+          --source . \
+          --verbose \
+          --report-format json \
+          --report-path gitleaks-report.json || true
+    
+    - name: Show Gitleaks output
+      if: always()
+      run: |
+        echo "===== Gitleaks Findings ====="
+        cat gitleaks-report.json || echo "No report generated."
+    
     - name: Upload Gitleaks report
       uses: actions/upload-artifact@v4
       with:
