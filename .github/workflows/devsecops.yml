@@ -2,24 +2,13 @@ name: DevSecOps Pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   devsecops:
     runs-on: ubuntu-latest
-
-    services:
-      docker:
-        image: docker:dind
-        options: --privileged --host=tcp://0.0.0.0:2375 --storage-driver=overlay2
-        ports:
-          - 2375:2375
-
-    env:
-      DOCKER_HOST: tcp://localhost:2375
-      DOCKER_TLS_VERIFY: 0
 
     steps:
     - name: Checkout code
@@ -45,7 +34,6 @@ jobs:
         if [ "$vulnerabilities" -ge 2 ]; then
           echo "Found 2 or more high/critical vulnerabilities - continuing build"
         fi
-
     - name: Upload npm audit report
       uses: actions/upload-artifact@v4
       with:
@@ -73,27 +61,24 @@ jobs:
         chmod +x gitleaks
         sudo mv gitleaks /usr/local/bin/
         gitleaks version
-
     - name: Run Gitleaks
       run: |
         gitleaks detect --source . --verbose --report-format json --report-path gitleaks-report.json || true
-
     - name: Upload Gitleaks report
       uses: actions/upload-artifact@v4
       with:
         name: gitleaks-report
         path: gitleaks-report.json
 
-    # Build Docker image
+    # Docker build from your repo
     - name: Build Juice Shop Docker image
       run: docker build -t juice-shop:local .
 
-    # Trivy scan BEFORE running container
+    # Container scan - Trivy
     - name: Install Trivy
       run: |
         sudo apt-get update && sudo apt-get install -y curl
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-
     - name: Scan image with Trivy
       run: trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:local || true
 
@@ -102,19 +87,4 @@ jobs:
       with:
         name: trivy-report
         path: trivy-report.txt
-
-    # Run container on port 3000, detached
-    - name: Run Juice Shop container on port 3000
-      run: docker run -d --rm -p 3000:3000 --name juice-shop-container juice-shop:local
-
-    # Wait for app startup (adjust if needed)
-    - name: Wait for app to start
-      run: sleep 10
-
-    # Stop container (if still running)
-    - name: Stop Juice Shop container
-      if: always()
-      run: docker stop juice-shop-container || true
-
-        docker rm juice-shop-container || true
 
