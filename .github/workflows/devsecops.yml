@@ -100,7 +100,18 @@ jobs:
       run: |
         docker rm -f juice-shop-test || true
         docker run -d --network zapnet --name juice-shop-test -p 3000:3000 juice-shop:local
-        sleep 20
+    
+    - name: Wait for Juice Shop to be ready
+      run: |
+        for i in {1..30}; do
+          if curl -s http://juice-shop-test:3000 > /dev/null; then
+            echo "Juice Shop is ready"
+            break
+          else
+            echo "Waiting for Juice Shop..."
+            sleep 5
+          fi
+        done
     
     - name: Create ZAP reports directory
       run: mkdir -p ${{ github.workspace }}/zap-reports
