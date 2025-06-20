@@ -9,37 +9,32 @@ on:
 jobs:
   devsecops:
     runs-on: ubuntu-latest
-    services:
-      docker:
-        image: docker:20.10.16-dind
-        options: --privileged
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Install Node.js
+    - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
         node-version: '22'
 
     # SCA - npm audit
     - name: Install dependencies
-      run: npm install
-    
+      run: npm ci
+
     - name: Run npm audit
       run: npm audit --json > audit-report.json || true
-    
+
     - name: Check High/Critical vulns in npm audit
       run: |
         sudo apt-get update && sudo apt-get install -y jq
-        cat audit-report.json
         vulnerabilities=$(jq '[.vulnerabilities[]? | select(.severity=="high" or .severity=="critical")] | length' audit-report.json)
         echo "High/Critical vulnerabilities found: $vulnerabilities"
         if [ "$vulnerabilities" -ge 2 ]; then
           echo "Found 2 or more high/critical vulnerabilities - continuing build"
         fi
-    
+
     - name: Upload npm audit report
       uses: actions/upload-artifact@v4
       with:
@@ -47,16 +42,12 @@ jobs:
         path: audit-report.json
 
     # SAST - Semgrep
-    - name: Install latest Semgrep
-      run: |
-        pip install --upgrade semgrep
-    
-    - name: Run Semgrep scan
-      run: |
-        semgrep --config=p/owasp-top-ten \
-                --max-target-bytes=5000000 \
-                --json --output=semgrep-report.json || true
-    
+    - name: Install Semgrep
+      run: pip install --upgrade semgrep
+
+    - name: Run Semgrep
+      run: semgrep --config=p/owasp-top-ten --json --output=semgrep-report.json || true
+
     - name: Upload Semgrep report
       uses: actions/upload-artifact@v4
       with:
@@ -66,90 +57,75 @@ jobs:
     # Secrets scan - Gitleaks
     - name: Install Gitleaks
       run: |
-        curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.17.0/gitleaks_8.17.0_linux_x64.tar.gz \
-          -o gitleaks.tar.gz
+        curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.17.0/gitleaks_8.17.0_linux_x64.tar.gz -o gitleaks.tar.gz
         tar -xvf gitleaks.tar.gz gitleaks
         chmod +x gitleaks
         sudo mv gitleaks /usr/local/bin/
-        gitleaks version  # Debug: potwierdzenie instalacji
+        gitleaks version
 
-    - name: Run Gitleaks scan
+    - name: Run Gitleaks
       run: |
-        gitleaks detect \
-          --source . \
-          --verbose \
-          --report-format json \
-          --report-path gitleaks-report.json || true
-    
-    - name: Show Gitleaks output
-      if: always()
-      run: |
-        echo "===== Gitleaks Findings ====="
-        cat gitleaks-report.json || echo "No report generated."
-    
+        gitleaks detect --source . --verbose --report-format json --report-path gitleaks-report.json || true
+
     - name: Upload Gitleaks report
       uses: actions/upload-artifact@v4
       with:
         name: gitleaks-report
         path: gitleaks-report.json
 
-    # Docker build
-    - name: Build Docker image
-      run: docker build -t juice-shop:latest .
+    # Docker build from your repo
+    - name: Build Juice Shop Docker image
+      run: docker build -t juice-shop:local .
 
-    # Trivy scan
+    # Container scan - Trivy
     - name: Install Trivy
       run: |
         sudo apt-get update && sudo apt-get install -y curl
         curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-    - name: Scan Docker image with Trivy
-      run: |
-        trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:latest || true
+
+    - name: Scan image with Trivy
+      run: trivy image --severity HIGH,CRITICAL --format table --output trivy-report.txt juice-shop:local || true
+
     - name: Upload Trivy report
       uses: actions/upload-artifact@v4
       with:
         name: trivy-report
         path: trivy-report.txt
 
-    # Setup Docker network
-    - name: Setup Docker network
+    # ZAP setup
+    - name: Create Docker network
       run: docker network create zapnet || true
 
-    # Build and run Juice Shop container
     - name: Run Juice Shop container
       run: |
         docker rm -f juice-shop-test || true
-        docker run -d --network zapnet --name juice-shop-test -p 3000:3000 juice-shop:latest
+        docker run -d --network zapnet --name juice-shop-test -p 3000:3000 juice-shop:local
         sleep 20
 
-    # Prepare ZAP reports directory
-    - name: Create reports directory
+    - name: Create ZAP reports directory
       run: mkdir -p ${{ github.workspace }}/zap-reports
 
-    # Run OWASP ZAP Baseline Scan
     - name: Run OWASP ZAP Baseline Scan
       run: |
-        docker run --rm \
-          --network zapnet \
+        docker run --rm --network zapnet \
           -v ${{ github.workspace }}/zap-reports:/zap/wrk \
-          owasp/zap2docker-stable:2.14.0 zap-baseline.py \
+          ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
             -t http://juice-shop-test:3000 \
             -J /zap/wrk/zap-report.json \
             -r /zap/wrk/zap-report.html || true
 
-    # Upload ZAP JSON Report
-    - name: Upload ZAP JSON Report
+    - name: Upload ZAP JSON report
       uses: actions/upload-artifact@v4
       with:
         name: zap-report-json
         path: zap-reports/zap-report.json
 
-    # Upload ZAP HTML Report
-    - name: Upload ZAP HTML Report
+    - name: Upload ZAP HTML report
       uses: actions/upload-artifact@v4
       with:
         name: zap-report-html
         path: zap-reports/zap-report.html
+
 
 
 
